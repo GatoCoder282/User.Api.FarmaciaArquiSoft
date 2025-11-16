@@ -5,6 +5,8 @@ using System.Net;
 using System.Net.Mail;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
+using User.Domain.Ports;
 
 namespace User.Infraestructure.Persistence
 {

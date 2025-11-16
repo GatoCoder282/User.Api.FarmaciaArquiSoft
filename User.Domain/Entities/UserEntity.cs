@@ -2,8 +2,7 @@
 
 namespace User.Domain.Entities
 {
-    
-    public class User
+    public class UserEntity
     {
         #region Atributos
         public int id { get; set; }
@@ -28,9 +27,9 @@ namespace User.Domain.Entities
         #endregion
 
         #region Constructor
-        public User() { }
+        public UserEntity() { }
 
-        public User(int id, string username, string password, string mail, string phone, string ci, UserRole role,
+        public UserEntity(int id, string username, string password, string mail, string phone, string ci, UserRole role,
                     bool is_deleted = false, int created_by = 0, int updated_by = 0,
                     DateTime? created_at = null, DateTime? updated_at = null)
         {

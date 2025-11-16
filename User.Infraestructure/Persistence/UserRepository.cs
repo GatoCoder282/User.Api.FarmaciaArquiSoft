@@ -1,13 +1,16 @@
-﻿using System;
+﻿using MySql.Data.MySqlClient;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using User.Domain.Entities;
+using User.Domain.Ports;
 using User.Infraestructure.Data;
 
 namespace User.Infraestructure.Persistence
 {
-    public class UserRepository : IRepository<User>
+    public class UserRepository : IUserRepository
     {
         private readonly DatabaseConnection _db;
 
@@ -16,7 +19,7 @@ namespace User.Infraestructure.Persistence
             _db = DatabaseConnection.Instance;
         }
 
-        public async Task<User> Create(User entity)
+        public async Task<UserEntity> Create(UserEntity entity)
         {
 
             string query = @"
@@ -49,7 +52,7 @@ VALUES
             return entity;
         }
 
-        public async Task<User?> GetById(User entity)
+        public async Task<UserEntity?> GetById(UserEntity entity)
         {
             string query = "SELECT * FROM users WHERE id = @id AND is_deleted = FALSE";
             using var connection = _db.GetConnection();
@@ -61,7 +64,7 @@ VALUES
             using var reader = await comand.ExecuteReaderAsync();
             if (await reader.ReadAsync())
             {
-                var u = new User
+                var u = new UserEntity
                 {
                     id = reader.GetInt32("id"),
 
@@ -104,7 +107,7 @@ VALUES
 
             while (await reader.ReadAsync())
             {
-                lista.Add(new User
+                lista.Add(new UserEntity
                 {
                     id = reader.GetInt32("id"),
 
@@ -133,7 +136,7 @@ VALUES
             return lista;
         }
 
-        public async Task Update(User entity)
+        public async Task Update(UserEntity entity)
         {
             string query = @"
 UPDATE users 
@@ -178,7 +181,7 @@ WHERE id=@id";
             await comand.ExecuteNonQueryAsync();
         }
 
-        public async Task Delete(User entity)
+        public async Task Delete(UserEntity entity)
         {
             const string sql = @"
 UPDATE users

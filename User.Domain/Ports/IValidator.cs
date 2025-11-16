@@ -1,12 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using FluentResults;
+using User.Domain.Entities;
 
 namespace User.Domain.Ports
 {
-    internal interface IValidator
+    public interface IUserValidator
     {
+        Result Validate(UserEntity user);
     }
 }

@@ -7,6 +7,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using User.Application.DTOs;
+using User.Application.Ports;
+using User.Domain.Entities;
 using User.Domain.Enums;
 using User.Domain.Ports;
 
@@ -14,11 +16,11 @@ namespace User.Application.Services
 {
     public class UserService : IUserService
     {
-        private readonly IRepository<User> _repo;
-        private readonly IValidator<User> _validator;
+        private readonly IUserRepository _repo;
+        private readonly IUserValidator _validator;
         private readonly IEmailSender _email;
 
-        public UserService(IRepository<User> repo, IValidator<User> validator, IEmailSender email)
+        public UserService(IUserRepository repo, IUserValidator validator, IEmailSender email)
         {
             _repo = repo;
             _validator = validator;
@@ -26,12 +28,12 @@ namespace User.Application.Services
         }
 
 
-        public async Task<User> RegisterAsync(UserCreateDto dto, int actorId)
+        public async Task<UserEntity> RegisterAsync(UserCreateDto dto, int actorId)
         {
             if (string.IsNullOrWhiteSpace(dto.Mail))
                 throw new DomainException("El correo es obligatorio.");
 
-            var user = new User
+            var user = new UserEntity
             {
                 first_name = dto.FirstName.Trim(),
                 last_first_name = dto.LastFirstName.Trim(),
@@ -92,10 +94,10 @@ namespace User.Application.Services
             return created;
         }
 
-        public async Task<User?> GetByIdAsync(int id)
-            => await _repo.GetById(new User { id = id });
+        public async Task<UserEntity?> GetByIdAsync(int id)
+            => await _repo.GetById(new UserEntity { id = id });
 
-        public Task<IEnumerable<User>> ListAsync()
+        public Task<IEnumerable<UserEntity>> ListAsync()
             => _repo.GetAll();
 
         public async Task UpdateAsync(int id, UserUpdateDto dto, int actorId)
@@ -153,7 +155,7 @@ namespace User.Application.Services
             await _repo.Delete(current);
         }
 
-        public async Task<User> AuthenticateAsync(string username, string password)
+        public async Task<UserEntity> AuthenticateAsync(string username, string password)
         {
             var all = await _repo.GetAll();
             var user = all.FirstOrDefault(u =>
@@ -165,7 +167,7 @@ namespace User.Application.Services
             return user;
         }
 
-        public bool CanPerformAction(User user, string action)
+        public bool CanPerformAction(UserEntity user, string action)
         {
             if (user.role == UserRole.Administrador) return true;
 
