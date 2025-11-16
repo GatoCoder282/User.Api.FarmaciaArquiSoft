@@ -8,7 +8,7 @@ namespace User.Domain.Entities
         public int id { get; set; }
         public string first_name { get; set; }
         public string last_first_name { get; set; }
-        public string last_second_name { get; set; }
+        public string? last_second_name { get; set; }
         public string username { get; set; }
         public string password { get; set; }
         public bool has_changed_password { get; set; } = false;
