@@ -11,6 +11,7 @@ using User.Application.Ports;
 using User.Domain.Entities;
 using User.Domain.Enums;
 using User.Domain.Ports;
+using User.Domain.Validators;
 
 namespace User.Application.Services
 {

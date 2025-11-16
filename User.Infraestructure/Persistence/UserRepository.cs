@@ -1,10 +1,12 @@
 ﻿using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using User.Domain.Entities;
+using User.Domain.Enums;
 using User.Domain.Ports;
 using User.Infraestructure.Data;
 
@@ -94,9 +96,9 @@ VALUES
             return null;
         }
 
-        public async Task<IEnumerable<User>> GetAll()
+        public async Task<IEnumerable<UserEntity>> GetAll()
         {
-            var lista = new List<User>();
+            var lista = new List<UserEntity>();
             string query = "SELECT * FROM users WHERE is_deleted = FALSE ORDER BY last_first_name ASC, first_name ASC;";
 
             using var connection = _db.GetConnection();

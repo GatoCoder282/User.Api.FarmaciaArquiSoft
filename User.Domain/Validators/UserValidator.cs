@@ -1,14 +1,17 @@
-﻿using System;
+﻿using FluentResults;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using User.Domain.Entities;
+using User.Domain.Ports;
 
 namespace User.Domain.Validators
 {
-    public class UserValidator : IValidator<User>
+    public class UserValidator : IUserValidator
     {
         private static readonly Regex AlphaSpaceRegex =
             new Regex(@"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$", RegexOptions.Compiled);
@@ -19,7 +22,7 @@ namespace User.Domain.Validators
         private static readonly Regex DigitsRegex =
             new Regex(@"^\d+$", RegexOptions.Compiled);
 
-        public Result Validate(User user)
+        public Result Validate(UserEntity user)
         {
             var result = Result.Ok();
 
