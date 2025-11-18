@@ -17,7 +17,6 @@ namespace User.Api.Controllers
         private readonly IUserService _service;
         public UserController(IUserService service) => _service = service;
 
-        
         [HttpPost]
         public async Task<IActionResult> Register([FromBody] UserCreateDto dto, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
@@ -29,7 +28,28 @@ namespace User.Api.Controllers
             }
             catch (ValidationException ve) { return BadRequest(new { message = ve.Message, errors = ve.Errors }); }
             catch (DomainException de) { return BadRequest(new { message = de.Message }); }
-            catch (Exception) { return StatusCode(500); }
+            catch (Exception ex)
+            {
+                var msg = ex.Message ?? string.Empty;
+
+                if (msg.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase))
+                {
+                    var lower = msg.ToLowerInvariant();
+
+                    if (lower.Contains("mail"))
+                        return BadRequest(new { message = "El correo ya existe." });
+
+                    if (lower.Contains("ci"))
+                        return BadRequest(new { message = "El CI ya existe." });
+
+                    if (lower.Contains("username"))
+                        return BadRequest(new { message = "El nombre de usuario ya existe." });
+
+                    return BadRequest(new { message = "Ya existe un usuario con datos duplicados (correo, CI o usuario)." });
+                }
+
+                return StatusCode(500);
+            }
         }
 
         // GET api/user/{id}
@@ -130,7 +150,6 @@ namespace User.Api.Controllers
         private static UserCompleteViewDto ToCompleteView(UserEntity u)
             => new(u.id, u.username, u.first_name, u.last_first_name, u.last_second_name, u.mail, u.phone, u.ci, u.role, u.has_changed_password, u.password_version, u.last_password_changed_at);
 
-        // Small request model for authentication body
         public record AuthenticateRequest(string Username, string Password);
     }
 }
