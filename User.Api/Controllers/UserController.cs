@@ -18,7 +18,9 @@ namespace User.Api.Controllers
         public UserController(IUserService service) => _service = service;
 
         [HttpPost]
-        public async Task<IActionResult> Register([FromBody] UserCreateDto dto, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
+        public async Task<IActionResult> Register(
+            [FromBody] UserCreateDto dto,
+            [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
             try
             {
@@ -26,33 +28,20 @@ namespace User.Api.Controllers
                 var created = await _service.RegisterAsync(dto, actorId);
                 return CreatedAtAction(nameof(GetById), new { id = created.id }, ToCompleteView(created));
             }
-            catch (ValidationException ve) { return BadRequest(new { message = ve.Message, errors = ve.Errors }); }
-            catch (DomainException de) { return BadRequest(new { message = de.Message }); }
-            catch (Exception ex)
+            catch (ValidationException ve)
             {
-                var msg = ex.Message ?? string.Empty;
-
-                if (msg.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase))
-                {
-                    var lower = msg.ToLowerInvariant();
-
-                    if (lower.Contains("mail"))
-                        return BadRequest(new { message = "El correo ya existe." });
-
-                    if (lower.Contains("ci"))
-                        return BadRequest(new { message = "El CI ya existe." });
-
-                    if (lower.Contains("username"))
-                        return BadRequest(new { message = "El nombre de usuario ya existe." });
-
-                    return BadRequest(new { message = "Ya existe un usuario con datos duplicados (correo, CI o usuario)." });
-                }
-
+                return BadRequest(new { message = ve.Message, errors = ve.Errors });
+            }
+            catch (DomainException de)
+            {
+                return BadRequest(new { message = de.Message });
+            }
+            catch (Exception)
+            {
                 return StatusCode(500);
             }
         }
 
-        // GET api/user/{id}
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
@@ -65,7 +54,6 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
-        // GET api/user
         [HttpGet]
         public async Task<IActionResult> List()
         {
@@ -78,9 +66,11 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
-        // PUT api/user/{id}
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] UserUpdateDto dto, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
+        public async Task<IActionResult> Update(
+            int id,
+            [FromBody] UserUpdateDto dto,
+            [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
             try
             {
@@ -94,9 +84,10 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
-        // DELETE api/user/{id}
         [HttpDelete("{id:int}")]
-        public async Task<IActionResult> SoftDelete(int id, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
+        public async Task<IActionResult> SoftDelete(
+            int id,
+            [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
             try
             {
@@ -109,7 +100,7 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
-        // POST api/user/{id}/change-password
+
         [HttpPost("{id:int}/change-password")]
         public async Task<IActionResult> ChangePassword(int id, [FromBody] UserChangePasswordDto dto)
         {
@@ -124,7 +115,6 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
-        // POST api/user/authenticate
         [HttpPost("authenticate")]
         public async Task<IActionResult> Authenticate([FromBody] AuthenticateRequest req)
         {
@@ -137,18 +127,19 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
-        // Helpers / mappers
         private static int ParseActorId(string? header)
         {
             if (!string.IsNullOrWhiteSpace(header) && int.TryParse(header, out var id)) return id;
-            return 0; // fallback actor id
+            return 0; 
         }
 
         private static UserViewDto ToView(UserEntity u)
             => new(u.id, u.username, u.last_first_name, u.last_second_name, u.mail, u.phone, u.ci, u.role);
 
         private static UserCompleteViewDto ToCompleteView(UserEntity u)
-            => new(u.id, u.username, u.first_name, u.last_first_name, u.last_second_name, u.mail, u.phone, u.ci, u.role, u.has_changed_password, u.password_version, u.last_password_changed_at);
+            => new(u.id, u.username, u.first_name, u.last_first_name, u.last_second_name,
+                   u.mail, u.phone, u.ci, u.role, u.has_changed_password, u.password_version,
+                   u.last_password_changed_at);
 
         public record AuthenticateRequest(string Username, string Password);
     }

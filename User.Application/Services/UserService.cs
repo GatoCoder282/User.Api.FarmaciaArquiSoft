@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using MySql.Data.MySqlClient;                     
 using User.Application.DTOs;
 using User.Application.Ports;
 using User.Domain.Entities;
@@ -57,13 +58,11 @@ namespace User.Application.Services
                 is_deleted = false
             };
 
-            // 1) Validación de reglas de dominio
             var pre = _validator.Validate(user);
             if (!pre.IsSuccess)
                 throw new ValidationException(pre.Errors.ToDictionary());
 
-            // 2) Usuarios activos (is_deleted = FALSE)
-            var existing = await _repo.GetAll(); // solo activos
+            var existing = await _repo.GetAll(); // sólo is_deleted = FALSE
 
             if (existing.Any(x => x.ci.Equals(user.ci, StringComparison.OrdinalIgnoreCase)))
                 throw new DomainException("El CI ya existe.");
@@ -73,11 +72,10 @@ namespace User.Application.Services
                     x.mail!.Equals(user.mail, StringComparison.OrdinalIgnoreCase)))
                 throw new DomainException("El correo ya existe.");
 
-            // 3) Username en base a nombres (puede chocar con usuarios eliminados)
             var baseUsername = GenerateUsernameFromNames(user.first_name, user.last_first_name, user.last_second_name);
             user.username = EnsureUniqueUsername(baseUsername, existing.Select(x => x.username));
 
-            // 4) Password temporal
+            //Password temporal
             var plainPassword = GenerateRandomPassword(12);
             user.password = HashPassword(plainPassword);
 
@@ -89,10 +87,9 @@ namespace User.Application.Services
             }
             catch (Exception ex)
             {
-                var msg = ex.Message ?? string.Empty;
-                if (msg.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase))
+                if (ex is MySqlException mysqlEx && mysqlEx.Number == 1062)
                 {
-                    var lower = msg.ToLowerInvariant();
+                    var lower = mysqlEx.Message.ToLowerInvariant();
 
                     if (lower.Contains("mail"))
                         throw new DomainException("El correo ya existe.");
@@ -100,17 +97,14 @@ namespace User.Application.Services
                     if (lower.Contains("ci"))
                         throw new DomainException("El CI ya existe.");
 
-                    if (lower.Contains("username"))
-                        throw new DomainException("El nombre de usuario ya existe.");
-
-                    // Cualquier otro índice único (por si acaso)
-                    throw new DomainException("Ya existe un usuario con datos duplicados (correo, CI o usuario).");
+                    throw new DomainException("El correo o CI ya existe.");
                 }
 
-                // No es un duplicate -> que suba como 500
+                // Cualquier otro error sí es 500
                 throw;
             }
 
+            // 5) Envío de correo (best effort)
             var subject = "Tu acceso al sistema de la farmacia";
             var body = $@"Hola {created.first_name},
 
@@ -147,7 +141,7 @@ Por seguridad, cambia la contraseña al ingresar.";
             current.updated_by = actorId;
             current.updated_at = DateTime.Now;
 
-            var existingUsers = await _repo.GetAll(); // solo activos (is_deleted = FALSE)
+            var existingUsers = await _repo.GetAll(); // sólo activos
 
             if (existingUsers.Any(u =>
                     u.ci.Equals(current.ci, StringComparison.OrdinalIgnoreCase) &&
@@ -175,20 +169,16 @@ Por seguridad, cambia la contraseña al ingresar.";
             }
             catch (Exception ex)
             {
-                var msg = ex.Message ?? string.Empty;
-
-                if (msg.Contains("Duplicate entry", StringComparison.OrdinalIgnoreCase))
+                if (ex is MySqlException mysqlEx && mysqlEx.Number == 1062)
                 {
-                    var lower = msg.ToLowerInvariant();
+                    var lower = mysqlEx.Message.ToLowerInvariant();
 
                     if (lower.Contains("mail"))
                         throw new DomainException("El correo ya existe.");
                     if (lower.Contains("ci"))
                         throw new DomainException("El CI ya existe.");
-                    if (lower.Contains("username"))
-                        throw new DomainException("El nombre de usuario ya existe.");
 
-                    throw new DomainException("Ya existe un usuario con datos duplicados (correo, CI o usuario).");
+                    throw new DomainException("El correo o CI ya existe.");
                 }
 
                 throw; // cualquier otra cosa -> 500
@@ -265,6 +255,7 @@ Por seguridad, cambia la contraseña al ingresar.";
                 if (uc != UnicodeCategory.NonSpacingMark) sb.Append(ch);
             }
             var s = sb.ToString().Normalize(NormalizationForm.FormC);
+            // solo [a-z0-9]
             s = Regex.Replace(s, "[^a-z0-9]", "");
             if (s.Length > 20) s = s[..20];
             if (string.IsNullOrEmpty(s)) s = "user";
@@ -359,6 +350,7 @@ Por seguridad, cambia la contraseña al ingresar.";
 
     public class DomainException : Exception { public DomainException(string m) : base(m) { } }
     public class NotFoundException : Exception { public NotFoundException(string m) : base(m) { } }
+
     public class ValidationException : Exception
     {
         public Dictionary<string, string> Errors { get; }
