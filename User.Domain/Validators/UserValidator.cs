@@ -84,8 +84,18 @@ namespace User.Domain.Validators
 
             var digits = user.phone.ToString(CultureInfo.InvariantCulture).Length;
 
-            if (digits < 6 || digits > 10)
-                result = result.WithFieldError("phone", "El teléfono debe tener entre 6 y 10 dígitos.");
+            if (string.IsNullOrWhiteSpace(user.phone))
+            {
+                result = result.WithFieldError("phone", "El teléfono es obligatorio.");
+            }
+            else
+            {
+                if (!DigitsRegex.IsMatch(user.phone))
+                    result = result.WithFieldError("phone", "El teléfono solo debe contener números.");
+
+                if (user.phone.Length < 6 || user.phone.Length > 10)
+                    result = result.WithFieldError("phone", "El teléfono debe tener entre 6 y 10 dígitos.");
+            }
 
 
             return result;

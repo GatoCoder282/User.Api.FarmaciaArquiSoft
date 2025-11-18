@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using MySql.Data.MySqlClient;                     
 using User.Application.DTOs;
 using User.Application.Ports;
 using User.Domain.Entities;
@@ -28,7 +29,6 @@ namespace User.Application.Services
             _email = email;
         }
 
-
         public async Task<UserEntity> RegisterAsync(UserCreateDto dto, int actorId)
         {
             if (string.IsNullOrWhiteSpace(dto.Mail))
@@ -43,10 +43,9 @@ namespace User.Application.Services
                 username = "",
                 password = "",
                 mail = dto.Mail.Trim(),
-                phone = dto.Phone,
+                phone = dto.Phone.Trim(),
                 ci = dto.Ci.Trim(),
                 role = dto.Role,
-
 
                 has_changed_password = false,
                 password_version = 1,
@@ -63,31 +62,57 @@ namespace User.Application.Services
             if (!pre.IsSuccess)
                 throw new ValidationException(pre.Errors.ToDictionary());
 
-
-            var existing = await _repo.GetAll();
-            var baseUsername = GenerateUsernameFromNames(user.first_name, user.last_first_name, user.last_second_name);
-            user.username = EnsureUniqueUsername(baseUsername, existing.Select(x => x.username));
+            var existing = await _repo.GetAll(); // sólo is_deleted = FALSE
 
             if (existing.Any(x => x.ci.Equals(user.ci, StringComparison.OrdinalIgnoreCase)))
                 throw new DomainException("El CI ya existe.");
-            if (existing.Any(x => x.mail?.Equals(user.mail, StringComparison.OrdinalIgnoreCase) == true))
+
+            if (existing.Any(x =>
+                    !string.IsNullOrWhiteSpace(x.mail) &&
+                    x.mail!.Equals(user.mail, StringComparison.OrdinalIgnoreCase)))
                 throw new DomainException("El correo ya existe.");
 
+            var baseUsername = GenerateUsernameFromNames(user.first_name, user.last_first_name, user.last_second_name);
+            user.username = EnsureUniqueUsername(baseUsername, existing.Select(x => x.username));
+
+            //Password temporal
             var plainPassword = GenerateRandomPassword(12);
             user.password = HashPassword(plainPassword);
 
-            var created = await _repo.Create(user);
+            UserEntity created;
 
+            try
+            {
+                created = await _repo.Create(user);
+            }
+            catch (Exception ex)
+            {
+                if (ex is MySqlException mysqlEx && mysqlEx.Number == 1062)
+                {
+                    var lower = mysqlEx.Message.ToLowerInvariant();
+
+                    if (lower.Contains("mail"))
+                        throw new DomainException("El correo ya existe.");
+
+                    if (lower.Contains("ci"))
+                        throw new DomainException("El CI ya existe.");
+
+                    throw new DomainException("El correo o CI ya existe.");
+                }
+
+                // Cualquier otro error sí es 500
+                throw;
+            }
+
+            // 5) Envío de correo (best effort)
             var subject = "Tu acceso al sistema de la farmacia";
-            var body =
-                            $@"Hola {created.first_name},
+            var body = $@"Hola {created.first_name},
 
-                        Se creó tu cuenta.
-                        Usuario: {created.username}
-                        Contraseña temporal: {plainPassword}
+Se creó tu cuenta.
+Usuario: {created.username}
+Contraseña temporal: {plainPassword}
 
-                        Por seguridad, cambia la contraseña al ingresar.";
-
+Por seguridad, cambia la contraseña al ingresar.";
 
             try { await _email.SendAsync(created.mail!, subject, body); }
             catch { /* log y seguir */ }
@@ -116,11 +141,48 @@ namespace User.Application.Services
             current.updated_by = actorId;
             current.updated_at = DateTime.Now;
 
+            var existingUsers = await _repo.GetAll(); // sólo activos
+
+            if (existingUsers.Any(u =>
+                    u.ci.Equals(current.ci, StringComparison.OrdinalIgnoreCase) &&
+                    u.id != id))
+            {
+                throw new DomainException("El CI ya existe.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(current.mail) &&
+                existingUsers.Any(u =>
+                    !string.IsNullOrWhiteSpace(u.mail) &&
+                    u.mail!.Equals(current.mail, StringComparison.OrdinalIgnoreCase) &&
+                    u.id != id))
+            {
+                throw new DomainException("El correo ya existe.");
+            }
+
             var result = _validator.Validate(current);
             if (!result.IsSuccess)
                 throw new ValidationException(result.Errors.ToDictionary());
 
-            await _repo.Update(current);
+            try
+            {
+                await _repo.Update(current);
+            }
+            catch (Exception ex)
+            {
+                if (ex is MySqlException mysqlEx && mysqlEx.Number == 1062)
+                {
+                    var lower = mysqlEx.Message.ToLowerInvariant();
+
+                    if (lower.Contains("mail"))
+                        throw new DomainException("El correo ya existe.");
+                    if (lower.Contains("ci"))
+                        throw new DomainException("El CI ya existe.");
+
+                    throw new DomainException("El correo o CI ya existe.");
+                }
+
+                throw; // cualquier otra cosa -> 500
+            }
         }
 
         public async Task ChangePasswordAsync(int userId, string currentPassword, string newPassword)
@@ -144,8 +206,6 @@ namespace User.Application.Services
 
             await _repo.Update(u);
         }
-
-
 
         public async Task SoftDeleteAsync(int id, int actorId)
         {
@@ -180,7 +240,6 @@ namespace User.Application.Services
             };
             return allowed.Contains(action, StringComparer.OrdinalIgnoreCase);
         }
-
 
         public static string GenerateUsernameFromNames(string first, string firstLast, string secondLast)
         {
@@ -257,6 +316,7 @@ namespace User.Application.Services
             for (int i = 0; i < actual.Length; i++) diff |= actual[i] ^ expected[i];
             return diff == 0;
         }
+
         private static string GenerateRandomPassword(int length)
         {
             if (length < 8) length = 8;
@@ -266,20 +326,17 @@ namespace User.Application.Services
             const string digits = "0123456789";
             const string symbols = "!@#$%^&*_-";
 
-
             var required = new[]
             {
-        lowers[RandomNumberGenerator.GetInt32(lowers.Length)],
-        uppers[RandomNumberGenerator.GetInt32(uppers.Length)],
-        digits[RandomNumberGenerator.GetInt32(digits.Length)],
-        symbols[RandomNumberGenerator.GetInt32(symbols.Length)]
-    }.ToList();
-
+                lowers[RandomNumberGenerator.GetInt32(lowers.Length)],
+                uppers[RandomNumberGenerator.GetInt32(uppers.Length)],
+                digits[RandomNumberGenerator.GetInt32(digits.Length)],
+                symbols[RandomNumberGenerator.GetInt32(symbols.Length)]
+            }.ToList();
 
             string all = lowers + uppers + digits + symbols;
             while (required.Count < length)
                 required.Add(all[RandomNumberGenerator.GetInt32(all.Length)]);
-
 
             for (int i = required.Count - 1; i > 0; i--)
             {
@@ -289,12 +346,11 @@ namespace User.Application.Services
 
             return new string(required.ToArray());
         }
-
     }
-
 
     public class DomainException : Exception { public DomainException(string m) : base(m) { } }
     public class NotFoundException : Exception { public NotFoundException(string m) : base(m) { } }
+
     public class ValidationException : Exception
     {
         public Dictionary<string, string> Errors { get; }
