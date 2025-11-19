@@ -1,8 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using User.Domain.Entities;
 using User.Domain.Enums;
 using User.Domain.Ports;
@@ -12,12 +12,18 @@ namespace User.Api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
+    [Authorize] 
     public class UserController : ControllerBase
     {
         private readonly IUserFacade _facade;
-        public UserController(IUserFacade facade) => _facade = facade;
+        private readonly ITokenService _token;
 
-        // Request / Response models locales al proyecto API (no dependen de User.Application.DTOs)
+        public UserController(IUserFacade facade, ITokenService token)
+        {
+            _facade = facade;
+            _token = token;
+        }
+
         public record CreateUserRequest(
             string FirstName,
             string LastFirstName,
@@ -46,6 +52,7 @@ namespace User.Api.Controllers
 
         public record UserCompleteResponse(int Id, string Username, string FirstName, string LastFirstName, string? LastSecondName, string? Mail, string Phone, string Ci, UserRole Role, bool HasChangedPassword, int PasswordVersion, DateTime? LastPasswordChangedAt);
 
+        [AllowAnonymous]
         [HttpPost]
         public async Task<IActionResult> Register([FromBody] CreateUserRequest req, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
@@ -159,6 +166,7 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
+        [AllowAnonymous]
         [HttpPost("authenticate")]
         public async Task<IActionResult> Authenticate([FromBody] AuthenticateRequest req)
         {
@@ -167,7 +175,8 @@ namespace User.Api.Controllers
             try
             {
                 var user = await _facade.AuthenticateAsync(req.Username, req.Password);
-                return Ok(ToListItemResponse(user));
+                var token = _token.GenerateToken(user);
+                return Ok(new { token, user = ToListItemResponse(user) });
             }
             catch (DomainException de) { return Unauthorized(new { message = de.Message }); }
             catch (Exception) { return StatusCode(500); }
