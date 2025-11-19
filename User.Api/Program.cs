@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Builder.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using User.Application.Ports;
 using User.Application.Services;
 using User.Domain.Ports;
 using User.Domain.Validators;
@@ -30,11 +29,16 @@ namespace User.Api
             builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 
             // Registraciones de DI
-            builder.Services.AddScoped<IUserService, UserService>();
             builder.Services.AddScoped<IUserRepository, UserRepository>();
             builder.Services.AddScoped<IUserValidator, UserValidator>();
             builder.Services.AddScoped<IEncryptionService, EncryptionService>();
             builder.Services.AddScoped<IEmailSender, EmailSender>();
+            // registrar builder/factory/password/facade
+            builder.Services.AddScoped<IUsernameGenerator, UsernameGenerator>();
+            builder.Services.AddScoped<IUserBuilder, UserBuilder>();
+            builder.Services.AddScoped<IUserFactory, UserFactory>();
+            builder.Services.AddScoped<IPasswordService, PasswordService>();
+            builder.Services.AddScoped<IUserFacade, UserFacade>();
 
             var app = builder.Build();
 

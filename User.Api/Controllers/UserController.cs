@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
-using User.Application.Ports;
-using User.Application.Services;
 using User.Domain.Entities;
 using User.Domain.Enums;
+using User.Domain.Ports;
+using User.Domain.Exceptions;
 
 namespace User.Api.Controllers
 {
@@ -14,8 +14,8 @@ namespace User.Api.Controllers
     [ApiController]
     public class UserController : ControllerBase
     {
-        private readonly IUserService _service;
-        public UserController(IUserService service) => _service = service;
+        private readonly IUserFacade _facade;
+        public UserController(IUserFacade facade) => _facade = facade;
 
         // Request / Response models locales al proyecto API (no dependen de User.Application.DTOs)
         public record CreateUserRequest(
@@ -25,7 +25,7 @@ namespace User.Api.Controllers
             string Mail,
             string Phone,
             string Ci,
-            int Role // recibir como int para evitar referencias externas
+            int Role
         );
 
         public record UpdateUserRequest(
@@ -47,19 +47,14 @@ namespace User.Api.Controllers
         public record UserCompleteResponse(int Id, string Username, string FirstName, string LastFirstName, string? LastSecondName, string? Mail, string Phone, string Ci, UserRole Role, bool HasChangedPassword, int PasswordVersion, DateTime? LastPasswordChangedAt);
 
         [HttpPost]
-        public async Task<IActionResult> Register(
-            [FromBody] CreateUserRequest req,
-            [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
+        public async Task<IActionResult> Register([FromBody] CreateUserRequest req, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
-
-            if (!Enum.IsDefined(typeof(UserRole), req.Role))
-                return BadRequest(new { message = "Role inválido." });
+            if (!Enum.IsDefined(typeof(UserRole), req.Role)) return BadRequest(new { message = "Role inválido." });
 
             try
             {
                 var actorId = ParseActorId(actorHeader);
-
                 var entity = new UserEntity
                 {
                     first_name = req.FirstName?.Trim() ?? "",
@@ -71,21 +66,12 @@ namespace User.Api.Controllers
                     role = (UserRole)req.Role
                 };
 
-                var created = await _service.RegisterAsync(entity, actorId);
+                var created = await _facade.RegisterAsync(entity, actorId);
                 return CreatedAtAction(nameof(GetById), new { id = created.id }, ToCompleteResponse(created));
             }
-            catch (ValidationException ve)
-            {
-                return BadRequest(new { message = ve.Message, errors = ve.Errors });
-            }
-            catch (DomainException de)
-            {
-                return BadRequest(new { message = de.Message });
-            }
-            catch (Exception)
-            {
-                return StatusCode(500);
-            }
+            catch (ValidationException ve) { return BadRequest(new { message = ve.Message, errors = ve.Errors }); }
+            catch (DomainException de) { return BadRequest(new { message = de.Message }); }
+            catch (Exception) { return StatusCode(500); }
         }
 
         [HttpGet("{id:int}")]
@@ -93,7 +79,7 @@ namespace User.Api.Controllers
         {
             try
             {
-                var u = await _service.GetByIdAsync(id);
+                var u = await _facade.GetByIdAsync(id);
                 if (u is null) return NotFound();
                 return Ok(ToCompleteResponse(u));
             }
@@ -105,7 +91,7 @@ namespace User.Api.Controllers
         {
             try
             {
-                var list = await _service.ListAsync();
+                var list = await _facade.ListAsync();
                 var view = list.Select(ToListItemResponse);
                 return Ok(view);
             }
@@ -113,18 +99,14 @@ namespace User.Api.Controllers
         }
 
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(
-            int id,
-            [FromBody] UpdateUserRequest req,
-            [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateUserRequest req, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
             if (!ModelState.IsValid) return BadRequest(ModelState);
 
             try
             {
                 var actorId = ParseActorId(actorHeader);
-
-                var current = await _service.GetByIdAsync(id) ?? throw new NotFoundException("Usuario no encontrado.");
+                var current = await _facade.GetByIdAsync(id) ?? throw new NotFoundException("Usuario no encontrado.");
 
                 if (req.FirstName is not null) current.first_name = req.FirstName.Trim();
                 if (req.LastFirstName is not null) current.last_first_name = req.LastFirstName.Trim();
@@ -134,12 +116,11 @@ namespace User.Api.Controllers
                 if (req.Ci is not null) current.ci = req.Ci.Trim();
                 if (req.Role is not null)
                 {
-                    if (!Enum.IsDefined(typeof(UserRole), req.Role.Value))
-                        return BadRequest(new { message = "Role inválido." });
+                    if (!Enum.IsDefined(typeof(UserRole), req.Role.Value)) return BadRequest(new { message = "Role inválido." });
                     current.role = (UserRole)req.Role.Value;
                 }
 
-                await _service.UpdateAsync(current, actorId);
+                await _facade.UpdateAsync(current, actorId);
                 return NoContent();
             }
             catch (ValidationException ve) { return BadRequest(new { message = ve.Message, errors = ve.Errors }); }
@@ -149,14 +130,12 @@ namespace User.Api.Controllers
         }
 
         [HttpDelete("{id:int}")]
-        public async Task<IActionResult> SoftDelete(
-            int id,
-            [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
+        public async Task<IActionResult> SoftDelete(int id, [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
             try
             {
                 var actorId = ParseActorId(actorHeader);
-                await _service.SoftDeleteAsync(id, actorId);
+                await _facade.SoftDeleteAsync(id, actorId);
                 return NoContent();
             }
             catch (NotFoundException nf) { return NotFound(new { message = nf.Message }); }
@@ -171,7 +150,7 @@ namespace User.Api.Controllers
 
             try
             {
-                await _service.ChangePasswordAsync(id, req.CurrentPassword, req.NewPassword);
+                await _facade.ChangePasswordAsync(id, req.CurrentPassword, req.NewPassword);
                 return NoContent();
             }
             catch (ValidationException ve) { return BadRequest(new { message = ve.Message, errors = ve.Errors }); }
@@ -187,7 +166,7 @@ namespace User.Api.Controllers
 
             try
             {
-                var user = await _service.AuthenticateAsync(req.Username, req.Password);
+                var user = await _facade.AuthenticateAsync(req.Username, req.Password);
                 return Ok(ToListItemResponse(user));
             }
             catch (DomainException de) { return Unauthorized(new { message = de.Message }); }
