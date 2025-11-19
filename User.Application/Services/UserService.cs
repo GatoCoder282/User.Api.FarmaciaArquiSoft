@@ -29,34 +29,31 @@ namespace User.Application.Services
             _email = email;
         }
 
-        public async Task<UserEntity> RegisterAsync(UserCreateDto dto, int actorId)
+        // Ahora recibe la entidad de dominio (el controlador debe mapear DTO -> UserEntity)
+        public async Task<UserEntity> RegisterAsync(UserEntity user, int actorId)
         {
-            if (string.IsNullOrWhiteSpace(dto.Mail))
+            if (string.IsNullOrWhiteSpace(user.mail))
                 throw new DomainException("El correo es obligatorio.");
 
-            var user = new UserEntity
-            {
-                first_name = dto.FirstName.Trim(),
-                last_first_name = dto.LastFirstName.Trim(),
-                last_second_name = dto.LastSecondName.Trim(),
+            // Normalizaciones defensivas
+            user.first_name = user.first_name?.Trim() ?? "";
+            user.last_first_name = user.last_first_name?.Trim() ?? "";
+            user.last_second_name = string.IsNullOrWhiteSpace(user.last_second_name) ? null : user.last_second_name!.Trim();
+            user.mail = user.mail?.Trim() ?? "";
+            user.phone = user.phone?.Trim() ?? "";
+            user.ci = user.ci?.Trim() ?? "";
+            user.username = user.username ?? "";
+            user.password = user.password ?? "";
 
-                username = "",
-                password = "",
-                mail = dto.Mail.Trim(),
-                phone = dto.Phone.Trim(),
-                ci = dto.Ci.Trim(),
-                role = dto.Role,
-
-                has_changed_password = false,
-                password_version = 1,
-                last_password_changed_at = null,
-
-                created_by = actorId,
-                updated_by = actorId,
-                created_at = DateTime.Now,
-                updated_at = DateTime.Now,
-                is_deleted = false
-            };
+            // valores por defecto / auditoría
+            user.has_changed_password = false;
+            user.password_version = 1;
+            user.last_password_changed_at = null;
+            user.created_by = actorId;
+            user.updated_by = actorId;
+            user.created_at = DateTime.Now;
+            user.updated_at = DateTime.Now;
+            user.is_deleted = false;
 
             var pre = _validator.Validate(user);
             if (!pre.IsSuccess)
@@ -75,7 +72,7 @@ namespace User.Application.Services
             var baseUsername = GenerateUsernameFromNames(user.first_name, user.last_first_name, user.last_second_name);
             user.username = EnsureUniqueUsername(baseUsername, existing.Select(x => x.username));
 
-            //Password temporal
+            // Password temporal
             var plainPassword = GenerateRandomPassword(12);
             user.password = HashPassword(plainPassword);
 
@@ -104,7 +101,6 @@ namespace User.Application.Services
                 throw;
             }
 
-            // 5) Envío de correo (best effort)
             var subject = "Tu acceso al sistema de la farmacia";
             var body = $@"Hola {created.first_name},
 
@@ -126,17 +122,20 @@ Por seguridad, cambia la contraseña al ingresar.";
         public Task<IEnumerable<UserEntity>> ListAsync()
             => _repo.GetAll();
 
-        public async Task UpdateAsync(int id, UserUpdateDto dto, int actorId)
+        // Ahora Update recibe una entidad completa (el controlador hace el merge parcial antes de llamar)
+        public async Task UpdateAsync(UserEntity user, int actorId)
         {
-            var current = await GetByIdAsync(id) ?? throw new NotFoundException("Usuario no encontrado.");
+            var current = await GetByIdAsync(user.id) ?? throw new NotFoundException("Usuario no encontrado.");
 
-            if (dto.FirstName is not null) current.first_name = dto.FirstName.Trim();
-            if (dto.LastFirstName is not null) current.last_first_name = dto.LastFirstName.Trim();
-            if (dto.LastSecondName is not null) current.last_second_name = dto.LastSecondName.Trim();
-            if (dto.Mail is not null) current.mail = dto.Mail.Trim();
-            if (dto.Phone is not null) current.phone = dto.Phone.Trim();
-            if (dto.Ci is not null) current.ci = dto.Ci.Trim();
-            if (dto.Role is not null) current.role = dto.Role.Value;
+            // El parámetro 'user' ya contiene los valores actualizados (controller hizo el merge),
+            // pero seguimos usando 'current' como base por seguridad y auditoría.
+            current.first_name = user.first_name;
+            current.last_first_name = user.last_first_name;
+            current.last_second_name = user.last_second_name;
+            current.mail = user.mail;
+            current.phone = user.phone;
+            current.ci = user.ci;
+            current.role = user.role;
 
             current.updated_by = actorId;
             current.updated_at = DateTime.Now;
@@ -145,7 +144,7 @@ Por seguridad, cambia la contraseña al ingresar.";
 
             if (existingUsers.Any(u =>
                     u.ci.Equals(current.ci, StringComparison.OrdinalIgnoreCase) &&
-                    u.id != id))
+                    u.id != current.id))
             {
                 throw new DomainException("El CI ya existe.");
             }
@@ -154,7 +153,7 @@ Por seguridad, cambia la contraseña al ingresar.";
                 existingUsers.Any(u =>
                     !string.IsNullOrWhiteSpace(u.mail) &&
                     u.mail!.Equals(current.mail, StringComparison.OrdinalIgnoreCase) &&
-                    u.id != id))
+                    u.id != current.id))
             {
                 throw new DomainException("El correo ya existe.");
             }

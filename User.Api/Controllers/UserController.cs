@@ -4,9 +4,9 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using User.Application.Ports;
-using User.Application.DTOs;
-using User.Domain.Entities;
 using User.Application.Services;
+using User.Domain.Entities;
+using User.Domain.Enums;
 
 namespace User.Api.Controllers
 {
@@ -17,16 +17,62 @@ namespace User.Api.Controllers
         private readonly IUserService _service;
         public UserController(IUserService service) => _service = service;
 
+        // Request / Response models locales al proyecto API (no dependen de User.Application.DTOs)
+        public record CreateUserRequest(
+            string FirstName,
+            string LastFirstName,
+            string? LastSecondName,
+            string Mail,
+            string Phone,
+            string Ci,
+            int Role // recibir como int para evitar referencias externas
+        );
+
+        public record UpdateUserRequest(
+            string? FirstName,
+            string? LastFirstName,
+            string? LastSecondName,
+            string? Mail,
+            string? Phone,
+            string? Ci,
+            int? Role
+        );
+
+        public record ChangePasswordRequest(string CurrentPassword, string NewPassword);
+
+        public record AuthenticateRequest(string Username, string Password);
+
+        public record UserListItemResponse(int Id, string Username, string LastFirstName, string? LastSecondName, string? Mail, string Phone, string Ci, UserRole Role);
+
+        public record UserCompleteResponse(int Id, string Username, string FirstName, string LastFirstName, string? LastSecondName, string? Mail, string Phone, string Ci, UserRole Role, bool HasChangedPassword, int PasswordVersion, DateTime? LastPasswordChangedAt);
+
         [HttpPost]
         public async Task<IActionResult> Register(
-            [FromBody] UserCreateDto dto,
+            [FromBody] CreateUserRequest req,
             [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
+            if (!Enum.IsDefined(typeof(UserRole), req.Role))
+                return BadRequest(new { message = "Role inválido." });
+
             try
             {
                 var actorId = ParseActorId(actorHeader);
-                var created = await _service.RegisterAsync(dto, actorId);
-                return CreatedAtAction(nameof(GetById), new { id = created.id }, ToCompleteView(created));
+
+                var entity = new UserEntity
+                {
+                    first_name = req.FirstName?.Trim() ?? "",
+                    last_first_name = req.LastFirstName?.Trim() ?? "",
+                    last_second_name = string.IsNullOrWhiteSpace(req.LastSecondName) ? null : req.LastSecondName!.Trim(),
+                    mail = req.Mail?.Trim() ?? "",
+                    phone = req.Phone?.Trim() ?? "",
+                    ci = req.Ci?.Trim() ?? "",
+                    role = (UserRole)req.Role
+                };
+
+                var created = await _service.RegisterAsync(entity, actorId);
+                return CreatedAtAction(nameof(GetById), new { id = created.id }, ToCompleteResponse(created));
             }
             catch (ValidationException ve)
             {
@@ -49,7 +95,7 @@ namespace User.Api.Controllers
             {
                 var u = await _service.GetByIdAsync(id);
                 if (u is null) return NotFound();
-                return Ok(ToCompleteView(u));
+                return Ok(ToCompleteResponse(u));
             }
             catch (Exception) { return StatusCode(500); }
         }
@@ -60,7 +106,7 @@ namespace User.Api.Controllers
             try
             {
                 var list = await _service.ListAsync();
-                var view = list.Select(ToView);
+                var view = list.Select(ToListItemResponse);
                 return Ok(view);
             }
             catch (Exception) { return StatusCode(500); }
@@ -69,13 +115,31 @@ namespace User.Api.Controllers
         [HttpPut("{id:int}")]
         public async Task<IActionResult> Update(
             int id,
-            [FromBody] UserUpdateDto dto,
+            [FromBody] UpdateUserRequest req,
             [FromHeader(Name = "X-Actor-Id")] string? actorHeader)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
             try
             {
                 var actorId = ParseActorId(actorHeader);
-                await _service.UpdateAsync(id, dto, actorId);
+
+                var current = await _service.GetByIdAsync(id) ?? throw new NotFoundException("Usuario no encontrado.");
+
+                if (req.FirstName is not null) current.first_name = req.FirstName.Trim();
+                if (req.LastFirstName is not null) current.last_first_name = req.LastFirstName.Trim();
+                if (req.LastSecondName is not null) current.last_second_name = req.LastSecondName.Trim();
+                if (req.Mail is not null) current.mail = req.Mail.Trim();
+                if (req.Phone is not null) current.phone = req.Phone.Trim();
+                if (req.Ci is not null) current.ci = req.Ci.Trim();
+                if (req.Role is not null)
+                {
+                    if (!Enum.IsDefined(typeof(UserRole), req.Role.Value))
+                        return BadRequest(new { message = "Role inválido." });
+                    current.role = (UserRole)req.Role.Value;
+                }
+
+                await _service.UpdateAsync(current, actorId);
                 return NoContent();
             }
             catch (ValidationException ve) { return BadRequest(new { message = ve.Message, errors = ve.Errors }); }
@@ -100,13 +164,14 @@ namespace User.Api.Controllers
             catch (Exception) { return StatusCode(500); }
         }
 
-
         [HttpPost("{id:int}/change-password")]
-        public async Task<IActionResult> ChangePassword(int id, [FromBody] UserChangePasswordDto dto)
+        public async Task<IActionResult> ChangePassword(int id, [FromBody] ChangePasswordRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
             try
             {
-                await _service.ChangePasswordAsync(id, dto.CurrentPassword, dto.NewPassword);
+                await _service.ChangePasswordAsync(id, req.CurrentPassword, req.NewPassword);
                 return NoContent();
             }
             catch (ValidationException ve) { return BadRequest(new { message = ve.Message, errors = ve.Errors }); }
@@ -118,29 +183,30 @@ namespace User.Api.Controllers
         [HttpPost("authenticate")]
         public async Task<IActionResult> Authenticate([FromBody] AuthenticateRequest req)
         {
+            if (!ModelState.IsValid) return BadRequest(ModelState);
+
             try
             {
                 var user = await _service.AuthenticateAsync(req.Username, req.Password);
-                return Ok(ToView(user));
+                return Ok(ToListItemResponse(user));
             }
             catch (DomainException de) { return Unauthorized(new { message = de.Message }); }
             catch (Exception) { return StatusCode(500); }
         }
 
+        // Helpers / mappers
         private static int ParseActorId(string? header)
         {
             if (!string.IsNullOrWhiteSpace(header) && int.TryParse(header, out var id)) return id;
-            return 0; 
+            return 0;
         }
 
-        private static UserViewDto ToView(UserEntity u)
+        private static UserListItemResponse ToListItemResponse(UserEntity u)
             => new(u.id, u.username, u.last_first_name, u.last_second_name, u.mail, u.phone, u.ci, u.role);
 
-        private static UserCompleteViewDto ToCompleteView(UserEntity u)
+        private static UserCompleteResponse ToCompleteResponse(UserEntity u)
             => new(u.id, u.username, u.first_name, u.last_first_name, u.last_second_name,
                    u.mail, u.phone, u.ci, u.role, u.has_changed_password, u.password_version,
                    u.last_password_changed_at);
-
-        public record AuthenticateRequest(string Username, string Password);
     }
 }
