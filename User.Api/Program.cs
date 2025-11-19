@@ -39,6 +39,9 @@ namespace User.Api
             builder.Services.AddScoped<IUserFactory, UserFactory>();
             builder.Services.AddScoped<IPasswordService, PasswordService>();
             builder.Services.AddScoped<IUserFacade, UserFacade>();
+            builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
+            builder.Services.AddScoped<IUserPasswordService, UserPasswordService>();
+            builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
 
             var app = builder.Build();
 

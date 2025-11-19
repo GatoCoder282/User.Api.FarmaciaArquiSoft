@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using User.Domain.Entities;
 using User.Domain.Enums;
+using User.Domain.Exceptions;
 using User.Domain.Ports;
 using User.Domain.Validators;
-using User.Domain.Exceptions;
 
 namespace User.Application.Services
 {
@@ -17,14 +18,21 @@ namespace User.Application.Services
         private readonly IEmailSender _email;
         private readonly IUserFactory _factory;
         private readonly IPasswordService _password;
+        private readonly IAuthenticationService _auth;
+        private readonly IUserPasswordService _pwd;
+        private readonly IAuthorizationService _authz;
 
-        public UserFacade(IUserRepository repo, IUserValidator validator, IEmailSender email, IUserFactory factory, IPasswordService password)
+        public UserFacade(IUserRepository repo, IUserValidator validator, IEmailSender email, IUserFactory factory, IPasswordService password, IAuthenticationService auth, IUserPasswordService pwd, IAuthorizationService authz)
+
         {
             _repo = repo;
             _validator = validator;
             _email = email;
             _factory = factory;
             _password = password;
+            _auth = auth;
+            _pwd = pwd;
+            _authz = authz;
         }
 
         // Recibe entidad parcialmente construida (sin username/password) o construida por factory
@@ -109,27 +117,8 @@ Por seguridad, cambia la contraseña al ingresar.";
             await _repo.Update(current);
         }
 
-        public async Task ChangePasswordAsync(int userId, string currentPassword, string newPassword)
-        {
-            var u = await GetByIdAsync(userId) ?? throw new NotFoundException("Usuario no encontrado.");
+        public Task ChangePasswordAsync(int userId, string currentPassword, string newPassword) => _pwd.ChangePasswordAsync(userId, currentPassword, newPassword);
 
-            if (!_password.VerifyPassword(currentPassword, u.password))
-                throw new DomainException("La contraseña actual no es correcta.");
-
-            if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
-                throw new DomainException("La nueva contraseña debe tener al menos 8 caracteres.");
-
-            if (_password.VerifyPassword(newPassword, u.password))
-                throw new DomainException("La nueva contraseña no puede ser igual a la anterior.");
-
-            u.password = _password.HashPassword(newPassword);
-            u.has_changed_password = true;
-            u.password_version += 1;
-            u.last_password_changed_at = DateTime.Now;
-            u.updated_at = DateTime.Now;
-
-            await _repo.Update(u);
-        }
 
         public async Task SoftDeleteAsync(int id, int actorId)
         {
@@ -140,28 +129,9 @@ Por seguridad, cambia la contraseña al ingresar.";
             await _repo.Delete(current);
         }
 
-        public async Task<UserEntity> AuthenticateAsync(string username, string password)
-        {
-            var all = await _repo.GetAll();
-            var user = all.FirstOrDefault(u => u.username.Equals(username, StringComparison.OrdinalIgnoreCase) && !u.is_deleted);
+        public async Task<UserEntity> AuthenticateAsync(string username, string password) => await _auth.AuthenticateAsync(username, password);
 
-            if (user is null || !_password.VerifyPassword(password, user.password))
-                throw new DomainException("Credenciales inválidas.");
-
-            return user;
-        }
-
-        public bool CanPerformAction(UserEntity user, string action)
-        {
-            if (user.role == UserRole.Administrador) return true;
-            var allowed = user.role switch
-            {
-                UserRole.Cajero => new[] { "Vender", "VerMisDatos" },
-                UserRole.Almacenero => new[] { "Almacenar", "VerMisDatos" },
-                _ => Array.Empty<string>()
-            };
-            return allowed.Contains(action, StringComparer.OrdinalIgnoreCase);
-        }
+        public bool CanPerformAction(UserEntity user, string action) => _authz.CanPerformAction(user, action);
     }
 } 
 
