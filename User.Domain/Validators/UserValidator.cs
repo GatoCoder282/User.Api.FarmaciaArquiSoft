@@ -22,6 +22,11 @@ namespace User.Domain.Validators
         private static readonly Regex DigitsRegex =
             new Regex(@"^\d+$", RegexOptions.Compiled);
 
+        // CI: 5–12 dígitos, con letra opcional al inicio y/o al final
+        // Ejemplos válidos: 1234567, E1234567, 1234567A, E1234567A
+        private static readonly Regex CiRegex =
+            new Regex(@"^[A-Z]?\d{5,12}[A-Z]?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         public Result Validate(UserEntity user)
         {
             var result = Result.Ok();
@@ -68,20 +73,23 @@ namespace User.Domain.Validators
                     result = result.WithFieldError("mail", "El correo no tiene un formato válido.");
             }
 
-            // CI (obligatorio, solo dígitos, 5-12)
+            // CI (obligatorio, 5–12 dígitos, letra opcional al inicio o al final)
             if (string.IsNullOrWhiteSpace(user.ci))
+            {
                 result = result.WithFieldError("ci", "El CI es obligatorio.");
+            }
             else
             {
-                if (!DigitsRegex.IsMatch(user.ci))
-                    result = result.WithFieldError("ci", "El CI solo debe contener números.");
-                if (user.ci.Length < 5 || user.ci.Length > 12)
-                    result = result.WithFieldError("ci", "El CI debe tener entre 5 y 12 dígitos.");
+                if (!CiRegex.IsMatch(user.ci))
+                {
+                    result = result.WithFieldError(
+                        "ci",
+                        "El CI debe tener entre 5 y 12 dígitos, con una letra opcional al inicio o al final. Ejemplos: 1234567, E1234567, 1234567A, E1234567A."
+                    );
+                }
             }
 
-            // TELÉFONO (int): obligatorio, positivo, 6–10 dígitos
-            // *int* no guarda ceros a la izquierda, así que la longitud se evalúa sobre el valor entero.
-
+            // TELÉFONO (string): obligatorio, solo dígitos, 6–10 caracteres
             var digits = user.phone.ToString(CultureInfo.InvariantCulture).Length;
 
             if (string.IsNullOrWhiteSpace(user.phone))
@@ -96,7 +104,6 @@ namespace User.Domain.Validators
                 if (user.phone.Length < 6 || user.phone.Length > 10)
                     result = result.WithFieldError("phone", "El teléfono debe tener entre 6 y 10 dígitos.");
             }
-
 
             return result;
         }
