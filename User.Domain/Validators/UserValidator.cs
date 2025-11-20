@@ -21,9 +21,6 @@ namespace User.Domain.Validators
 
         private static readonly Regex DigitsRegex =
             new Regex(@"^\d+$", RegexOptions.Compiled);
-
-        // CI: 5–12 dígitos, con letra opcional al inicio y/o al final
-        // Ejemplos válidos: 1234567, E1234567, 1234567A, E1234567A
         private static readonly Regex CiRegex =
             new Regex(@"^[A-Z]?\d{5,12}[A-Z]?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
@@ -31,7 +28,6 @@ namespace User.Domain.Validators
         {
             var result = Result.Ok();
 
-            // NOMBRE (obligatorio, 2-50, letras/espacios)
             if (string.IsNullOrWhiteSpace(user.first_name))
                 result = result.WithFieldError("first_name", "El nombre es obligatorio.");
             else
@@ -42,7 +38,6 @@ namespace User.Domain.Validators
                     result = result.WithFieldError("first_name", "El nombre solo debe contener letras y espacios.");
             }
 
-            // Segundo apellido (opcional)
             if (!string.IsNullOrWhiteSpace(user.last_second_name))
             {
                 if (user.last_second_name.Length < 2 || user.last_second_name.Length > 50)
@@ -51,7 +46,6 @@ namespace User.Domain.Validators
                     result = result.WithFieldError("last_second_name", "El Segundo apellido solo debe contener letras y espacios.");
             }
 
-            // APELLIDO (obligatorio)
             if (string.IsNullOrWhiteSpace(user.last_first_name))
                 result = result.WithFieldError("last_first_name", "El apellido es obligatorio.");
             else
@@ -62,7 +56,6 @@ namespace User.Domain.Validators
                     result = result.WithFieldError("last_first_name", "El apellido solo debe contener letras y espacios.");
             }
 
-            // CORREO (obligatorio)
             if (string.IsNullOrWhiteSpace(user.mail))
                 result = result.WithFieldError("mail", "El correo es obligatorio.");
             else
@@ -73,7 +66,6 @@ namespace User.Domain.Validators
                     result = result.WithFieldError("mail", "El correo no tiene un formato válido.");
             }
 
-            // CI (obligatorio, 5–12 dígitos, letra opcional al inicio o al final)
             if (string.IsNullOrWhiteSpace(user.ci))
             {
                 result = result.WithFieldError("ci", "El CI es obligatorio.");
@@ -89,7 +81,6 @@ namespace User.Domain.Validators
                 }
             }
 
-            // TELÉFONO (string): obligatorio, solo dígitos, 6–10 caracteres
             var digits = user.phone.ToString(CultureInfo.InvariantCulture).Length;
 
             if (string.IsNullOrWhiteSpace(user.phone))
