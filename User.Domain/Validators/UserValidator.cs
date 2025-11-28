@@ -22,8 +22,6 @@ namespace User.Domain.Validators
         private static readonly Regex DigitsRegex =
             new Regex(@"^\d+$", RegexOptions.Compiled);
 
-        // CI: 5–12 dígitos, con letra opcional al inicio y/o al final
-        // Ejemplos válidos: 1234567, E1234567, 1234567A, E1234567A
         private static readonly Regex CiRegex =
             new Regex(@"^[A-Z]?\d{5,12}[A-Z]?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 

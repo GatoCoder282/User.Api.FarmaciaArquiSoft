@@ -19,27 +19,23 @@ namespace User.Api
         {
             var builder = WebApplication.CreateBuilder(args);
 
-            // Add services to the container.
             builder.Services.AddControllers();
             builder.Services.AddOpenApi();
 
             DatabaseConnection.Initialize(builder.Configuration);
             builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection("Smtp"));
 
-            // Repos / validators / infra
             builder.Services.AddScoped<IUserRepository, UserRepository>();
             builder.Services.AddScoped<IUserValidator, UserValidator>();
             builder.Services.AddScoped<IEncryptionService, EncryptionService>();
             builder.Services.AddScoped<IEmailSender, EmailSender>();
 
-            // Builder / Factory / Password / Username / Facade
             builder.Services.AddScoped<IUsernameGenerator, UsernameGenerator>();
             builder.Services.AddScoped<IUserBuilder, UserBuilder>();
             builder.Services.AddScoped<IUserFactory, UserFactory>();
             builder.Services.AddScoped<IPasswordService, PasswordService>();
             builder.Services.AddScoped<IUserFacade, UserFacade>();
 
-            // Auth-related services
             builder.Services.AddScoped<IAuthenticationService, AuthenticationService>();
             builder.Services.AddScoped<IUserPasswordService, UserPasswordService>();
             builder.Services.AddScoped<IAuthorizationService, AuthorizationService>();
