@@ -21,6 +21,10 @@ namespace User.Domain.Validators
 
         private static readonly Regex DigitsRegex =
             new Regex(@"^\d+$", RegexOptions.Compiled);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 57ac3b247822883a3c34426f43b277f3f04017f2
         private static readonly Regex CiRegex =
             new Regex(@"^[A-Z]?\d{5,12}[A-Z]?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
