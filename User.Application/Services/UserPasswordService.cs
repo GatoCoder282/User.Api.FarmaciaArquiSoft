@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 using User.Domain.Entities;
 using User.Domain.Exceptions;
 using User.Domain.Ports;
@@ -26,6 +27,15 @@ namespace User.Application.Services
 
             if (string.IsNullOrWhiteSpace(newPassword) || newPassword.Length < 8)
                 throw new DomainException("La nueva contraseña debe tener al menos 8 caracteres.");
+
+            if (!Regex.IsMatch(newPassword, @"\d"))
+                throw new DomainException("La nueva contraseña debe contener al menos un número.");
+            if (!Regex.IsMatch(newPassword, @"[A-Z]"))
+                throw new DomainException("La nueva contraseña debe contener al menos una letra mayúscula.");
+            if (!Regex.IsMatch(newPassword, @"[a-z]"))
+                throw new DomainException("La nueva contraseña debe contener al menos una letra minúscula.");
+            if (!Regex.IsMatch(newPassword, @"[\W_]"))
+                throw new DomainException("La nueva contraseña debe contener al menos un símbolo.");
 
             if (_password.VerifyPassword(newPassword, u.password))
                 throw new DomainException("La nueva contraseña no puede ser igual a la anterior.");
