@@ -176,7 +176,7 @@ namespace User.Api.Controllers
             {
                 var user = await _facade.AuthenticateAsync(req.Username, req.Password);
                 var token = _token.GenerateToken(user);
-                return Ok(new { token, user = ToListItemResponse(user) });
+                return Ok(new { token, user = ToCompleteResponse(user) });
             }
             catch (DomainException de) { return Unauthorized(new { message = de.Message }); }
             catch (Exception) { return StatusCode(500); }
