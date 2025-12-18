@@ -21,37 +21,54 @@ namespace User.Infraestructure.Persistence
             _db = DatabaseConnection.Instance;
         }
 
+        // User.Infraestructure.Persistence/UserRepository.cs
+
         public async Task<UserEntity> Create(UserEntity entity)
         {
-
             string query = @"
 INSERT INTO users 
-(first_name, last_first_name, last_second_name,  username, password,has_changed_password,password_version, mail, phone, ci, role, created_at, created_by, is_deleted) 
+(first_name, last_first_name, last_second_name,  username, password, has_changed_password, password_version, mail, phone, ci, role, created_at, created_by, is_deleted) 
 VALUES 
-(@first_name,@last_first_name, @last_second_name, @username,@password,@has_changed_password,@password_version, @mail, @phone, @ci, @role, @created_at, @created_by, @is_deleted)";
+(@first_name, @last_first_name, @last_second_name, @username, @password, @has_changed_password, @password_version, @mail, @phone, @ci, @role, @created_at, @created_by, @is_deleted)";
 
             using var connection = _db.GetConnection();
             await connection.OpenAsync();
+            using var transaction = connection.BeginTransaction();
 
-            using var comand = new MySqlCommand(query, connection);
-            comand.Parameters.AddWithValue("@first_name", entity.first_name);
-            comand.Parameters.AddWithValue("@last_first_name", entity.last_first_name);
-            comand.Parameters.AddWithValue("@last_second_name", entity.last_second_name);
-            comand.Parameters.AddWithValue("@username", entity.username);
-            comand.Parameters.AddWithValue("@password", entity.password);
-            comand.Parameters.AddWithValue("@has_changed_password", entity.has_changed_password);
-            comand.Parameters.AddWithValue("@password_version", entity.password_version);
-            comand.Parameters.AddWithValue("@mail", entity.mail);
-            comand.Parameters.AddWithValue("@phone", entity.phone);
-            comand.Parameters.AddWithValue("@ci", entity.ci);
-            comand.Parameters.AddWithValue("@role", entity.role.ToString());
-            comand.Parameters.AddWithValue("@created_at", entity.created_at);
-            comand.Parameters.AddWithValue("@created_by", (object?)entity.created_by ?? DBNull.Value);
-            comand.Parameters.AddWithValue("@is_deleted", entity.is_deleted);
+            try
+            {
+                using var comand = new MySqlCommand(query, connection, transaction);
 
-            await comand.ExecuteNonQueryAsync();
-            entity.id = (int)comand.LastInsertedId;
-            return entity;
+                comand.Parameters.AddWithValue("@first_name", entity.first_name);
+                comand.Parameters.AddWithValue("@last_first_name", entity.last_first_name);
+                comand.Parameters.AddWithValue("@last_second_name", entity.last_second_name);
+                comand.Parameters.AddWithValue("@username", entity.username);
+                comand.Parameters.AddWithValue("@password", entity.password);
+                comand.Parameters.AddWithValue("@has_changed_password", entity.has_changed_password);
+                comand.Parameters.AddWithValue("@password_version", entity.password_version);
+                comand.Parameters.AddWithValue("@mail", entity.mail);
+                comand.Parameters.AddWithValue("@phone", entity.phone);
+                comand.Parameters.AddWithValue("@ci", entity.ci);
+                comand.Parameters.AddWithValue("@role", entity.role.ToString());
+                comand.Parameters.AddWithValue("@created_at", entity.created_at);
+                comand.Parameters.AddWithValue("@created_by", (object?)entity.created_by ?? DBNull.Value);
+                comand.Parameters.AddWithValue("@is_deleted", entity.is_deleted);
+
+                await comand.ExecuteNonQueryAsync();
+                entity.id = (int)comand.LastInsertedId;
+                transaction.Commit();
+
+                return entity;
+            }
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+                if (ex is MySqlException mySqlEx && mySqlEx.Number == 1062) 
+                {
+                    throw new Exception($"Violación de unicidad en la base de datos (CI o Mail duplicado).", ex);
+                }
+                throw;
+            }
         }
 
         public async Task<UserEntity?> GetById(UserEntity entity)
